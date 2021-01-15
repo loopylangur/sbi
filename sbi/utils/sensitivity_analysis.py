@@ -436,6 +436,23 @@ class ActiveSubspace:
             average_outer_product, eigenvectors=True
         )
 
+        # Identify the direction of the eigenvectors. Above, we have computed an outer
+        # product m*mT=A. Note that the same matrix A can be constructed with the
+        # negative vector (-m)(-mT)=A. Thus, when performing an eigen-decomposition of
+        # A, we can not determine if the eigenvector was -m or m. We solve this issue
+        # below. We use that the average gradient m should be obtained by a mean over
+        # the eigenvectors (weighted by the eigenvalues).
+        av_gradient = torch.mean(gradients, dim=0)
+        av_gradient = av_gradient / torch.norm(av_gradient)
+        av_eigenvec = torch.mean(eigen_vectors * eigen_values, dim=1)
+        av_eigenvec = av_eigenvec / torch.norm(av_eigenvec)
+
+        # Invert if the negative eigenvectors are closer to the average gradient.
+        if (torch.mean((av_eigenvec - av_gradient) ** 2)) > (
+            torch.mean((-av_eigenvec - av_gradient) ** 2)
+        ):
+            eigen_vectors = -eigen_vectors
+
         self._eigen_vectors = eigen_vectors
 
         return eigen_values, eigen_vectors
