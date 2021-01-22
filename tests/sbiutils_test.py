@@ -5,10 +5,10 @@ import torch
 from torch import Tensor
 from torch.distributions import MultivariateNormal
 
-from sbi.utils import (
-    eval_conditional_density,
+from sbi.analysis import (
     conditional_corrcoeff,
     conditional_pairplot,
+    eval_conditional_density,
 )
 
 
