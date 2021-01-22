@@ -371,3 +371,40 @@ def batched_mixture_mv(matrix: Tensor, vector: Tensor) -> Tensor:
         Product (matrix * vector) of shape (batch_dim, num_components, parameter_dim).
     """
     return torch.einsum("bcij,bcj -> bci", matrix, vector)
+
+
+def expit(theta_t, lower_bound: Tensor, upper_bound: Tensor):
+    """
+    Return the expit() of an input.
+
+    The `expit` transforms an unbounded input to the interval
+    `[lower_bound, upper_bound]`.
+
+    Args:
+        theta_t: Input to be transformed.
+        lower_bound: Lower bound of the transformation.
+        upper_bound: Upper bound of the transformation.
+
+    Returns: theta that is bounded between `lower_bound` and `upper_bound`.
+    """
+    range_ = upper_bound - lower_bound
+    return range_ / (1 + torch.exp(-theta_t)) + lower_bound
+
+
+def logit(theta, lower_bound: Tensor, upper_bound: Tensor):
+    """
+    Return the logit() of an input.
+
+    The `logit` maps the interval `[lower_bound, upper_bound]` to an unbounded space.
+
+    Args:
+        theta: Input to be transformed.
+        lower_bound: Lower bound of the transformation.
+        upper_bound: Upper bound of the transformation.
+
+    Returns: theta_t that is unbounded.
+    """
+    range_ = upper_bound - lower_bound
+    theta_01 = (theta - lower_bound) / range_
+
+    return torch.log(theta_01 / (1 - theta_01))

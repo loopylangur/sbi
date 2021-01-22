@@ -450,26 +450,26 @@ class DirectPosterior(NeuralPosterior):
 
         if isinstance(self._prior, utils.BoxUniform):
 
-            def expit(theta_t):
-                ub = self._prior.support.upper_bound
-                lb = self._prior.support.lower_bound
-                r = ub - lb
-                return r / (1 + torch.exp(-theta_t)) + lb
+            def tf_inv(theta_t):
+                return utils.expit(
+                    theta_t,
+                    self._prior.support.lower_bound,
+                    self._prior.support.upper_bound,
+                )
 
-            def logit(theta):
-                ub = self._prior.support.upper_bound
-                lb = self._prior.support.lower_bound
-                r = ub - lb
-                theta_01 = (theta - lb) / r
-
-                return torch.log(theta_01 / (1 - theta_01))
+            def tf(theta):
+                return utils.logit(
+                    theta,
+                    self._prior.support.lower_bound,
+                    self._prior.support.upper_bound,
+                )
 
         else:
 
-            def expit(theta_t):
+            def tf_inv(theta_t):
                 return theta_t
 
-            def logit(theta):
+            def tf(theta):
                 return theta
 
         # Find initial position.
@@ -481,7 +481,7 @@ class DirectPosterior(NeuralPosterior):
         sorted_inits = inits[sort_indices]
         optimize_inits = sorted_inits[-num_to_optimize:]
 
-        optimize_inits = logit(optimize_inits)
+        optimize_inits = tf(optimize_inits)
 
         # Optimize the init locations.
         optimize_inits.requires_grad_(True)
@@ -490,7 +490,7 @@ class DirectPosterior(NeuralPosterior):
         for _ in range(num_iter):
             optimizer.zero_grad()
             probs = self.log_prob(
-                expit(optimize_inits), x=x, norm_posterior=False, track_gradients=True
+                tf_inv(optimize_inits), x=x, norm_posterior=False, track_gradients=True
             ).squeeze()
             loss = -probs.sum()
             loss.backward()
@@ -498,11 +498,11 @@ class DirectPosterior(NeuralPosterior):
 
         # Evaluate the optimized locations and pick the best one.
         log_probs_of_optimized = self.log_prob(
-            expit(optimize_inits), x=x, norm_posterior=False
+            tf_inv(optimize_inits), x=x, norm_posterior=False
         )
         best_theta = optimize_inits[torch.argmax(log_probs_of_optimized)]
 
-        return expit(best_theta)
+        return tf_inv(best_theta)
 
 
 class PotentialFunctionProvider:
