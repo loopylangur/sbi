@@ -601,6 +601,9 @@ class NeuralPosterior(ABC):
         the optimization is done, we select the parameter set that has the highest
         log-probability after the optimization.
 
+        For developers: if the prior is a `BoxUniform`, we carry out the optimization
+        in unbounded space and transform the result back into bounded space.
+
         Args:
             x: Conditioning context for posterior $p(\theta|x)$. If not provided,
                 fall back onto `x` passed to `set_default_x()`.
@@ -624,6 +627,8 @@ class NeuralPosterior(ABC):
         Returns: The MAP estimate.
         """
 
+        # If the prior is `BoxUniform`, define a transformation to optimize in
+        # unbounded space.
         if isinstance(self._prior, utils.BoxUniform):
 
             def tf_inv(theta_t):
