@@ -1,12 +1,11 @@
 # This file is part of sbi, a toolkit for simulation-based inference. sbi is licensed
 # under the Affero General Public License v3, see <https://www.gnu.org/licenses/>.
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
-import cma
 import numpy as np
 import torch
-from torch import Tensor, log, nn, optim
+from torch import Tensor, log, nn
 
 from sbi import utils as utils
 from sbi.inference.posteriors.base_posterior import NeuralPosterior
@@ -420,16 +419,18 @@ class DirectPosterior(NeuralPosterior):
         x: Optional[Tensor] = None,
         num_iter: int = 500,
         learning_rate: float = 1e-2,
+        init_method: Union[str, Tensor] = "posterior",
         num_init_samples: int = 10_000,
         num_to_optimize: int = 100,
-        show_progress_bars: bool = False,
+        show_progress_bars: bool = True,
     ) -> Tensor:
         """
         Returns the maximum-a-posteriori estimate (MAP).
 
         The MAP is obtained by running gradient ascent from a given number of starting
-        positions (sampled from the posterior) and then selecting the parameter set
-        that has the highest log-probability after the optimization.
+        positions (samples from the posterior with the highest log-probability). After
+        the optimization is done, we select the parameter set that has the highest
+        log-probability after the optimization.
 
         Args:
             x: Conditioning context for posterior $p(\theta|x)$. If not provided,
@@ -437,6 +438,10 @@ class DirectPosterior(NeuralPosterior):
             num_iter: Number of optimization steps that the algorithm takes
                 to find the MAP.
             learning_rate: Learning rate of the optimizer.
+            init_method: How to select the starting parameters for the optimization. If
+                it is a string, it can be either [`posterior`, `prior`], which samples
+                the respective distribution `num_init_samples` times. If it is a,
+                the tensor will be used as init locations.
             num_init_samples: Draw this number of samples from the posterior and
                 evaluate the log-probability of all of them.
             num_to_optimize: From the drawn `num_init_samples`, use the
@@ -447,62 +452,16 @@ class DirectPosterior(NeuralPosterior):
 
         Returns: The MAP estimate.
         """
-
-        if isinstance(self._prior, utils.BoxUniform):
-
-            def tf_inv(theta_t):
-                return utils.expit(
-                    theta_t,
-                    self._prior.support.lower_bound,
-                    self._prior.support.upper_bound,
-                )
-
-            def tf(theta):
-                return utils.logit(
-                    theta,
-                    self._prior.support.lower_bound,
-                    self._prior.support.upper_bound,
-                )
-
-        else:
-
-            def tf_inv(theta_t):
-                return theta_t
-
-            def tf(theta):
-                return theta
-
-        # Find initial position.
-        inits = self.sample((num_init_samples,), show_progress_bars=show_progress_bars)
-        init_probs = self.log_prob(inits, x=x, norm_posterior=False)
-        sort_indices = torch.argsort(init_probs, dim=0)
-
-        # Pick the `num_to_optimize` best init locations.
-        sorted_inits = inits[sort_indices]
-        optimize_inits = sorted_inits[-num_to_optimize:]
-
-        optimize_inits = tf(optimize_inits)
-
-        # Optimize the init locations.
-        optimize_inits.requires_grad_(True)
-        optimizer = optim.Adam([optimize_inits], lr=learning_rate)
-
-        for _ in range(num_iter):
-            optimizer.zero_grad()
-            probs = self.log_prob(
-                tf_inv(optimize_inits), x=x, norm_posterior=False, track_gradients=True
-            ).squeeze()
-            loss = -probs.sum()
-            loss.backward()
-            optimizer.step()
-
-        # Evaluate the optimized locations and pick the best one.
-        log_probs_of_optimized = self.log_prob(
-            tf_inv(optimize_inits), x=x, norm_posterior=False
+        return super().map_estimate(
+            x=x,
+            num_iter=num_iter,
+            learning_rate=learning_rate,
+            init_method=init_method,
+            num_init_samples=num_init_samples,
+            num_to_optimize=num_to_optimize,
+            show_progress_bars=show_progress_bars,
+            log_prob_kwargs={"norm_posterior": True},
         )
-        best_theta = optimize_inits[torch.argmax(log_probs_of_optimized)]
-
-        return tf_inv(best_theta)
 
 
 class PotentialFunctionProvider:

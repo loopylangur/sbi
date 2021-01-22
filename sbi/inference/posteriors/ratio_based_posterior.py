@@ -1,7 +1,7 @@
 # This file is part of sbi, a toolkit for simulation-based inference. sbi is licensed
 # under the Affero General Public License v3, see <https://www.gnu.org/licenses/>.
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 from warnings import warn
 
 import numpy as np
@@ -227,6 +227,54 @@ class RatioBasedPosterior(NeuralPosterior):
             show_progress_bars,
             mcmc_method,
             mcmc_parameters,
+        )
+
+    def map_estimate(
+        self,
+        x: Optional[Tensor] = None,
+        num_iter: int = 500,
+        learning_rate: float = 1e-2,
+        init_method: Union[str, Tensor] = "posterior",
+        num_init_samples: int = 500,
+        num_to_optimize: int = 100,
+        show_progress_bars: bool = True,
+    ) -> Tensor:
+        """
+        Returns the maximum-a-posteriori estimate (MAP).
+
+        The MAP is obtained by running gradient ascent from a given number of starting
+        positions (samples from the posterior with the highest log-probability). After
+        the optimization is done, we select the parameter set that has the highest
+        log-probability after the optimization.
+
+        Args:
+            x: Conditioning context for posterior $p(\theta|x)$. If not provided,
+                fall back onto `x` passed to `set_default_x()`.
+            num_iter: Number of optimization steps that the algorithm takes
+                to find the MAP.
+            learning_rate: Learning rate of the optimizer.
+            init_method: How to select the starting parameters for the optimization. If
+                it is a string, it can be either [`posterior`, `prior`], which samples
+                the respective distribution `num_init_samples` times. If it is a,
+                the tensor will be used as init locations.
+            num_init_samples: Draw this number of samples from the posterior and
+                evaluate the log-probability of all of them.
+            num_to_optimize: From the drawn `num_init_samples`, use the
+                `num_to_optimize` with highest log-probability as the initial points
+                for the optimization.
+            show_progress_bars: Whether or not to show a progressbar for sampling from
+                the posterior.
+
+        Returns: The MAP estimate.
+        """
+        return super().map_estimate(
+            x=x,
+            num_iter=num_iter,
+            learning_rate=learning_rate,
+            init_method=init_method,
+            num_init_samples=num_init_samples,
+            num_to_optimize=num_to_optimize,
+            show_progress_bars=show_progress_bars,
         )
 
     @property

@@ -4,7 +4,7 @@
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from math import ceil
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -12,7 +12,7 @@ from pyro.infer.mcmc import HMC, NUTS
 from pyro.infer.mcmc.api import MCMC
 from torch import Tensor
 from torch import multiprocessing as mp
-from torch import nn
+from torch import nn, optim
 
 from sbi import utils as utils
 from sbi.mcmc import (
@@ -581,6 +581,119 @@ class NeuralPosterior(ABC):
         self.net.train(True)
 
         return samples.reshape((*sample_shape, -1))
+
+    def map_estimate(
+        self,
+        x: Optional[Tensor] = None,
+        num_iter: int = 500,
+        learning_rate: float = 1e-2,
+        init_method: Union[str, Tensor] = "posterior",
+        num_init_samples: int = 10_000,
+        num_to_optimize: int = 100,
+        show_progress_bars: bool = True,
+        log_prob_kwargs: Dict = {},
+    ) -> Tensor:
+        """
+        Returns the maximum-a-posteriori estimate (MAP).
+
+        The MAP is obtained by running gradient ascent from a given number of starting
+        positions (samples from the posterior with the highest log-probability). After
+        the optimization is done, we select the parameter set that has the highest
+        log-probability after the optimization.
+
+        Args:
+            x: Conditioning context for posterior $p(\theta|x)$. If not provided,
+                fall back onto `x` passed to `set_default_x()`.
+            num_iter: Number of optimization steps that the algorithm takes
+                to find the MAP.
+            learning_rate: Learning rate of the optimizer.
+            init_method: How to select the starting parameters for the optimization. If
+                it is a string, it can be either [`posterior`, `prior`], which samples
+                the respective distribution `num_init_samples` times. If it is a,
+                the tensor will be used as init locations.
+            num_init_samples: Draw this number of samples from the posterior and
+                evaluate the log-probability of all of them.
+            num_to_optimize: From the drawn `num_init_samples`, use the
+                `num_to_optimize` with highest log-probability as the initial points
+                for the optimization.
+            show_progress_bars: Whether or not to show a progressbar for sampling from
+                the posterior.
+            log_prob_kwargs: Will be empty for SNLE and SNRE. Will contain
+                {'norm_posterior': True} for SNPE.
+
+        Returns: The MAP estimate.
+        """
+
+        if isinstance(self._prior, utils.BoxUniform):
+
+            def tf_inv(theta_t):
+                return utils.expit(
+                    theta_t,
+                    self._prior.support.lower_bound,
+                    self._prior.support.upper_bound,
+                )
+
+            def tf(theta):
+                return utils.logit(
+                    theta,
+                    self._prior.support.lower_bound,
+                    self._prior.support.upper_bound,
+                )
+
+        else:
+
+            def tf_inv(theta_t):
+                return theta_t
+
+            def tf(theta):
+                return theta
+
+        if isinstance(init_method, str):
+            # Find initial position.
+            if init_method == "posterior":
+                inits = self.sample(
+                    (num_init_samples,), show_progress_bars=show_progress_bars
+                )
+            elif init_method == "prior":
+                inits = self._prior.sample((num_init_samples,))
+            else:
+                raise NameError(
+                    "`init_method` not specified. Use either `posterior` "
+                    "or `prior` or provide a tensor."
+                )
+            init_probs = self.log_prob(inits, x=x, **log_prob_kwargs)
+            sort_indices = torch.argsort(init_probs, dim=0)
+
+            # Pick the `num_to_optimize` best init locations.
+            sorted_inits = inits[sort_indices]
+            optimize_inits = sorted_inits[-num_to_optimize:]
+        else:
+            optimize_inits = init_method
+
+        optimize_inits = tf(optimize_inits)
+
+        # Optimize the init locations.
+        optimize_inits.requires_grad_(True)
+        optimizer = optim.Adam([optimize_inits], lr=learning_rate)
+
+        for i in range(num_iter):
+            optimizer.zero_grad()
+            probs = self.log_prob(
+                tf_inv(optimize_inits), x=x, track_gradients=True, **log_prob_kwargs
+            ).squeeze()
+            loss = -probs.sum()
+            loss.backward()
+            optimizer.step()
+
+            print("Optimizing MAP estimate. Iterations: ", i, "/", num_iter, end="\r")
+
+        # Evaluate the optimized locations and pick the best one.
+        log_probs_of_optimized = self.log_prob(
+            tf_inv(optimize_inits), x=x, **log_prob_kwargs
+        )
+        best_theta = optimize_inits[torch.argmax(log_probs_of_optimized)]
+
+        return tf_inv(best_theta)
 
     def _build_mcmc_init_fn(
         self,
