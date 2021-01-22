@@ -73,6 +73,8 @@ def test_c2st_snpe_on_linearGaussian(
     # Compute the c2st and assert it is near chance level of 0.5.
     check_c2st(samples, target_samples, alg="snpe_c")
 
+    map_ = posterior.map_estimate(num_init_samples=1_000)
+
     # Checks for log_prob()
     if prior_str == "gaussian":
         # For the Gaussian prior, we compute the KLd between ground truth and posterior.
@@ -85,6 +87,8 @@ def test_c2st_snpe_on_linearGaussian(
         assert (
             dkl < max_dkl
         ), f"D-KL={dkl} is more than 2 stds above the average performance."
+
+        assert ((map_ - gt_posterior.mean) ** 2).sum() < 0.5
 
     elif prior_str == "uniform":
         # Check whether the returned probability outside of the support is zero.
@@ -110,6 +114,8 @@ def test_c2st_snpe_on_linearGaussian(
             < posterior_likelihood_unnorm / posterior_likelihood_norm
             < acceptance_prob * 1.01
         ), "Normalizing the posterior density using the acceptance probability failed."
+
+        assert ((map_ - ones(num_dim)) ** 2).sum() < 0.5
 
 
 def test_c2st_snpe_on_linearGaussian_different_dims(set_seed):

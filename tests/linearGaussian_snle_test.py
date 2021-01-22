@@ -143,6 +143,8 @@ def test_c2st_snl_on_linearGaussian(num_dim: int, prior_str: str, set_seed):
     # Check performance based on c2st accuracy.
     check_c2st(samples, target_samples, alg=f"snle_a-{prior_str}-prior")
 
+    map_ = posterior.map_estimate(num_init_samples=1_000, init_method="prior")
+
     # TODO: we do not have a test for SNL log_prob(). This is because the output
     # TODO: density is not normalized, so KLd does not make sense.
     if prior_str == "uniform":
@@ -151,6 +153,10 @@ def test_c2st_snl_on_linearGaussian(num_dim: int, prior_str: str, set_seed):
         assert (
             posterior_prob == 0.0
         ), "The posterior probability outside of the prior support is not zero"
+
+        assert ((map_ - ones(num_dim)) ** 2).sum() < 0.5
+    else:
+        assert ((map_ - gt_posterior.mean) ** 2).sum() < 0.5
 
 
 @pytest.mark.slow

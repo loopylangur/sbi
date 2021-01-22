@@ -158,6 +158,8 @@ def test_c2st_sre_on_linearGaussian(
     # Check performance based on c2st accuracy.
     check_c2st(samples, target_samples, alg=f"sre-{prior_str}-{method_str}")
 
+    map_ = posterior.map_estimate(num_init_samples=1_000, init_method="prior")
+
     # Checks for log_prob()
     if prior_str == "gaussian" and method_str == "aalr":
         # For the Gaussian prior, we compute the KLd between ground truth and
@@ -174,12 +176,17 @@ def test_c2st_sre_on_linearGaussian(
         assert (
             dkl < max_dkl
         ), f"KLd={dkl} is more than 2 stds above the average performance."
+
+        assert ((map_ - gt_posterior.mean) ** 2).sum() < 0.5
+
     if prior_str == "uniform":
         # Check whether the returned probability outside of the support is zero.
         posterior_prob = get_prob_outside_uniform_prior(posterior, num_dim)
         assert (
             posterior_prob == 0.0
         ), "The posterior probability outside of the prior support is not zero"
+
+        assert ((map_ - ones(num_dim)) ** 2).sum() < 0.5
 
 
 @pytest.mark.slow
