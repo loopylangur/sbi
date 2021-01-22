@@ -435,7 +435,7 @@ class DirectPosterior(NeuralPosterior):
             show_progress_bars: Whether or not to show a progressbar for sampling from
                 the posterior.
 
-        Returns: The MAP estimate
+        Returns: The MAP estimate.
         """
 
         # Find initial position.
@@ -459,13 +459,62 @@ class DirectPosterior(NeuralPosterior):
         # Optimize using genetic algorithm.
         es = cma.CMAEvolutionStrategy(
             init.numpy().tolist(),
+            0.1,
+            {"scaling_of_variables": prior_std, "verb_log": 0, "verb_disp": 0},
+        )
+        es.optimize(optimizer_loss)
+
+        return torch.as_tensor(es.best.x, dtype=torch.float32)
+
+    def mle_estimate(
+        self,
+        x: Optional[Tensor] = None,
+        num_init_samples: int = 10_000,
+        show_progress_bars: bool = False,
+    ) -> Tensor:
+        """
+        Returns the maximum-likelihood estimate (MLE) on the prior support.
+
+        The MLE is obtained by searching with a genetic algorithm.
+
+        Args:
+            x: Conditioning context for posterior $p(\theta|x)$. If not provided,
+                fall back onto `x` passed to `set_default_x()`.
+            num_init_samples: Draw this number of samples from the posterior, evaluate
+                the log-probability of all of them, and use the one with highest
+                log-probability as the initial point for the genetic algorithm.
+            show_progress_bars: Whether or not to show a progressbar for sampling from
+                the posterior.
+
+        Returns: The MLE estimate.
+        """
+
+        # Find initial position.
+        inits = self.sample((num_init_samples,), show_progress_bars=show_progress_bars)
+        init_probs = self.log_prob(
+            inits, x=x, norm_posterior=False
+        ) / self._prior.log_prob(inits)
+        init = inits[torch.argmax(init_probs.squeeze())]
+
+        prior_std = self._prior.sample((10_000,)).std(dim=0)
+
+        def optimizer_loss(theta):
+            theta_tensor = torch.as_tensor(theta, dtype=torch.float32)
+
+            if self._prior.log_prob(theta_tensor) > float("-inf"):
+                log_prob = (
+                    self.log_prob(theta_tensor, x=x, norm_posterior=False,)
+                    / self._prior.log_prob(theta_tensor).squeeze()
+                )
+                return (-log_prob).item()
+            else:
+                return torch.min(init_probs).item() - 1e5
+
+        # Optimize using genetic algorithm.
+        es = cma.CMAEvolutionStrategy(
+            init.numpy().tolist(),
             0.001,
-            {
-                "scaling_of_variables": prior_std,
-                "verbose": 0,
-                "verb_log": 0,
-                "verb_disp": 0,
-            },
+            {"scaling_of_variables": prior_std, "verb_log": 0, "verb_disp": 0},
         )
         es.optimize(optimizer_loss)
 
