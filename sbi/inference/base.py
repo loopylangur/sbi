@@ -22,7 +22,6 @@ from sbi.utils import (
     warn_on_invalid_x,
     warn_on_invalid_x_for_snpec_leakage,
 )
-from sbi.utils.plot import pairplot
 from sbi.utils.sbiutils import get_simulations_since_round
 from sbi.utils.torchutils import configure_default_device
 

@@ -1,3 +1,4 @@
+import logging
 from copy import deepcopy
 from typing import Any, Callable, Optional, Tuple, Union
 from warnings import warn
@@ -10,7 +11,7 @@ from torch.nn.utils import clip_grad_norm_
 from torch.utils import data
 from torch.utils.data.sampler import SubsetRandomSampler
 
-from sbi.utils.sbiutils import standardizing_net, handle_invalid_x
+from sbi.utils.sbiutils import handle_invalid_x, standardizing_net
 
 
 class Destandardize(nn.Module):
@@ -49,9 +50,9 @@ def destandardizing_net(batch_t: Tensor, min_std: float = 1e-7) -> nn.Module:
         t_std = 1
         logging.warning(
             f"""Using a one-dimensional batch will instantiate a Standardize transform 
-            with (mean, std) parameters which are not representative of the data. We allow
-            this behavior because you might be loading a pre-trained. If this is not the case, 
-            please be sure to use a larger batch."""
+            with (mean, std) parameters which are not representative of the data. We 
+            allow this behavior because you might be loading a pre-trained. If this is 
+            not the case, please be sure to use a larger batch."""
         )
 
     return Destandardize(t_mean, t_std)
@@ -63,10 +64,11 @@ def build_input_output_layer(
     z_score_theta: bool = True,
     z_score_property: bool = True,
     embedding_net_theta: nn.Module = nn.Identity(),
-) -> nn.Module:
+) -> Tuple[nn.Module, nn.Module]:
     r"""Builds input layer for the `ActiveSubspace` that optionally z-scores.
 
-    The regression network used in the `ActiveSubspace` will receive batches of $\theta$s and properties.
+    The regression network used in the `ActiveSubspace` will receive batches of
+    $\theta$s and properties.
 
     Args:
         batch_theta: Batch of $\theta$s, used to infer dimensionality and (optional)
@@ -75,8 +77,6 @@ def build_input_output_layer(
         z_score_theta: Whether to z-score $\theta$s passing into the network.
         z_score_property: Whether to z-score properties passing into the network.
         embedding_net_theta: Optional embedding network for $\theta$s.
-        unnormalize: Whether the layer should normalize the inputs (`False`) or
-            un-normalize them (`True`).
 
     Returns:
         Input layer that optionally z-scores.
@@ -280,8 +280,7 @@ class ActiveSubspace:
             self._regression_net = self._build_nn(self._theta[train_indices])
 
         optimizer = optim.Adam(
-            list(self._regression_net.parameters()),
-            lr=learning_rate,
+            list(self._regression_net.parameters()), lr=learning_rate,
         )
         max_num_epochs = 2 ** 31 - 1 if max_num_epochs is None else max_num_epochs
 
@@ -298,8 +297,7 @@ class ActiveSubspace:
                 loss.backward()
                 if clip_max_norm is not None:
                     clip_grad_norm_(
-                        self._regression_net.parameters(),
-                        max_norm=clip_max_norm,
+                        self._regression_net.parameters(), max_norm=clip_max_norm,
                     )
                 optimizer.step()
 

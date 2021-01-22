@@ -2,19 +2,7 @@
 # under the Affero General Public License v3, see <https://www.gnu.org/licenses/>.
 
 import collections
-import inspect
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    TypeVar,
-    Union,
-    cast,
-)
+from typing import Any, List, Optional, Tuple, Union
 
 import matplotlib as mpl
 import numpy as np
@@ -23,7 +11,7 @@ import torch
 from matplotlib import pyplot as plt
 from scipy.stats import gaussian_kde
 
-from sbi.utils.conditional_density import eval_conditional_density
+from sbi.analysis.conditional_density import eval_conditional_density
 
 try:
     collectionsAbc = collections.abc
