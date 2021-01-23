@@ -373,7 +373,7 @@ def batched_mixture_mv(matrix: Tensor, vector: Tensor) -> Tensor:
     return torch.einsum("bcij,bcj -> bci", matrix, vector)
 
 
-def expit(theta_t, lower_bound: Tensor, upper_bound: Tensor):
+def expit(theta_t: Tensor, lower_bound: Tensor, upper_bound: Tensor) -> Tensor:
     """
     Return the expit() of an input.
 
@@ -391,7 +391,7 @@ def expit(theta_t, lower_bound: Tensor, upper_bound: Tensor):
     return range_ / (1 + torch.exp(-theta_t)) + lower_bound
 
 
-def logit(theta, lower_bound: Tensor, upper_bound: Tensor):
+def logit(theta: Tensor, lower_bound: Tensor, upper_bound: Tensor) -> Tensor:
     """
     Return the logit() of an input.
 
