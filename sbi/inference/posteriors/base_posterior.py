@@ -585,7 +585,8 @@ class NeuralPosterior(ABC):
     def map_estimate(
         self,
         x: Optional[Tensor] = None,
-        num_iter: int = 500,
+        max_num_iter: int = 2000,
+        early_stop_at: Optional[float] = 1e-3,
         learning_rate: float = 1e-2,
         init_method: Union[str, Tensor] = "posterior",
         num_init_samples: int = 10_000,
@@ -607,8 +608,12 @@ class NeuralPosterior(ABC):
         Args:
             x: Conditioning context for posterior $p(\theta|x)$. If not provided,
                 fall back onto `x` passed to `set_default_x()`.
-            num_iter: Number of optimization steps that the algorithm takes
+            max_num_iter: Maximum number of optimization steps that the algorithm takes
                 to find the MAP.
+            early_stop_at: If `None`, it will optimize for `max_num_iter` iterations.
+                If `float`, the optimization will stop as soon as the steps taken by
+                the optimizer are smaller than `early_stop_at` times the standard
+                deviation of the initial guesses.
             learning_rate: Learning rate of the optimizer.
             init_method: How to select the starting parameters for the optimization. If
                 it is a string, it can be either [`posterior`, `prior`], which samples
@@ -675,13 +680,19 @@ class NeuralPosterior(ABC):
         else:
             optimize_inits = init_method
 
+        init_std = torch.std(optimize_inits, dim=0)
+
         optimize_inits = tf(optimize_inits)
 
         # Optimize the init locations.
         optimize_inits.requires_grad_(True)
         optimizer = optim.Adam([optimize_inits], lr=learning_rate)
 
-        for i in range(num_iter):
+        optim_step = float("inf")
+        iter_ = 0
+
+        while (optim_step > init_std * early_stop_at).any() and iter_ < max_num_iter:
+            previous_theta = tf_inv(optimize_inits)
             optimizer.zero_grad()
             probs = self.log_prob(
                 tf_inv(optimize_inits), x=x, track_gradients=True, **log_prob_kwargs
@@ -689,8 +700,10 @@ class NeuralPosterior(ABC):
             loss = -probs.sum()
             loss.backward()
             optimizer.step()
+            optim_step = torch.abs(tf_inv(optimize_inits) - previous_theta)
 
-            print("Optimizing MAP estimate. Iterations: ", i, "/", num_iter, end="\r")
+            print("Optimizing MAP estimate. Iterations: ", iter_, end="\r")
+            iter_ += 1
 
         # Evaluate the optimized locations and pick the best one.
         log_probs_of_optimized = self.log_prob(

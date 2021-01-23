@@ -232,7 +232,8 @@ class RatioBasedPosterior(NeuralPosterior):
     def map_estimate(
         self,
         x: Optional[Tensor] = None,
-        num_iter: int = 500,
+        max_num_iter: int = 2000,
+        early_stop_at: Optional[float] = 1e-3,
         learning_rate: float = 1e-2,
         init_method: Union[str, Tensor] = "posterior",
         num_init_samples: int = 500,
@@ -250,8 +251,12 @@ class RatioBasedPosterior(NeuralPosterior):
         Args:
             x: Conditioning context for posterior $p(\theta|x)$. If not provided,
                 fall back onto `x` passed to `set_default_x()`.
-            num_iter: Number of optimization steps that the algorithm takes
+            max_num_iter: Maximum number of optimization steps that the algorithm takes
                 to find the MAP.
+            early_stop_at: If `None`, it will optimize for `max_num_iter` iterations.
+                If `float`, the optimization will stop as soon as the steps taken by
+                the optimizer are smaller than `early_stop_at` times the standard
+                deviation of the initial guesses.
             learning_rate: Learning rate of the optimizer.
             init_method: How to select the starting parameters for the optimization. If
                 it is a string, it can be either [`posterior`, `prior`], which samples
@@ -269,7 +274,8 @@ class RatioBasedPosterior(NeuralPosterior):
         """
         return super().map_estimate(
             x=x,
-            num_iter=num_iter,
+            max_num_iter=max_num_iter,
+            early_stop_at=early_stop_at,
             learning_rate=learning_rate,
             init_method=init_method,
             num_init_samples=num_init_samples,
